@@ -9,6 +9,8 @@ on:
 
 jobs:
   build-tauri:
+    permissions:
+      contents: write # This fixes the 'Resource not accessible by integration' error!
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +28,9 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Install frontend dependencies
         run: npm install
