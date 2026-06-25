@@ -48,3 +48,8 @@
 - [x] Implement frontend syntax highlighting or markdown styling for prompt blocks.
   - **Antigravity Prompt:** `The database is working, but the UI looks a bit plain. Redesign the snippet cards to look more like code blocks, and add syntax highlighting logic.`
 - [x] Build a production installer executable (`.exe` or `.msi`) to verify the asset bundles correctly.
+
+### Phase 6: App Branding
+- [ ] Change app name to Prompt Vault
+- [ ] Generate and set custom app icon
+
