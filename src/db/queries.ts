@@ -64,6 +64,31 @@ export async function getAllSnippets(): Promise<Snippet[]> {
 }
 
 /**
+ * Deletes a snippet by ID.
+ */
+export async function deleteSnippet(id: number): Promise<void> {
+  const db = await getDb();
+  await db.execute('DELETE FROM snippets WHERE id = $1', [id]);
+}
+
+/**
+ * Fetches all categories from the database.
+ */
+export async function getAllCategories(): Promise<Category[]> {
+  const db = await getDb();
+  return await db.select<Category[]>('SELECT * FROM categories ORDER BY name ASC');
+}
+
+/**
+ * Creates a new category.
+ */
+export async function createCategory(name: string): Promise<number> {
+  const db = await getDb();
+  const result = await db.execute('INSERT INTO categories (name) VALUES ($1)', [name]);
+  return result.lastInsertId ?? 0;
+}
+
+/**
  * Adds a tag to a specific snippet.
  */
 export async function addTagToSnippet(snippetId: number, tagId: number): Promise<void> {

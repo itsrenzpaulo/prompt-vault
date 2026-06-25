@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import {
   Snippet,
+  Category,
   getAllSnippets,
+  getAllCategories,
   createSnippet,
+  deleteSnippet,
+  createCategory,
 } from "./db/queries";
 
 // Clipboard plugin for Tauri v2
@@ -15,12 +19,16 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 function App() {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
-  // const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [viewSnippet, setViewSnippet] = useState<Snippet | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newSnippetCategory, setNewSnippetCategory] = useState<number | "">("");
 
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -29,8 +37,10 @@ function App() {
     try {
       const fetchedSnippets = await getAllSnippets();
       setSnippets(fetchedSnippets);
+      const fetchedCategories = await getAllCategories();
+      setCategories(fetchedCategories);
     } catch (error) {
-      console.error("Failed to load snippets:", error);
+      console.error("Failed to load snippets or categories:", error);
     }
   };
 
@@ -47,11 +57,43 @@ function App() {
 
   const handleCopy = async (content: string) => {
     try {
-      await writeText(content);
+      // Fallback for Chrome web testing or restricted environments
+      if ('__TAURI_INTERNALS__' in window) {
+        await writeText(content);
+      } else {
+        await navigator.clipboard.writeText(content);
+      }
       showToast("Copied to clipboard!");
     } catch (err) {
       console.error("Failed to copy text: ", err);
       showToast("Failed to copy!");
+    }
+  };
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      await createCategory(newCategoryName);
+      setNewCategoryName("");
+      setIsCategoryModalOpen(false);
+      showToast("Category created!");
+      await loadData();
+    } catch (error) {
+      console.error("Failed to create category:", error);
+      showToast("Failed to create category.");
+    }
+  };
+
+  const handleDeleteSnippet = async (id: number) => {
+    try {
+      await deleteSnippet(id);
+      setViewSnippet(null);
+      showToast("Snippet deleted!");
+      await loadData();
+    } catch (error) {
+      console.error("Failed to delete snippet:", error);
+      showToast("Failed to delete snippet.");
     }
   };
 
@@ -60,9 +102,11 @@ function App() {
     if (!newTitle.trim() || !newContent.trim()) return;
 
     try {
-      await createSnippet(newTitle, newContent, selectedCategory ?? undefined);
+      const catId = typeof newSnippetCategory === "number" ? newSnippetCategory : undefined;
+      await createSnippet(newTitle, newContent, catId);
       setNewTitle("");
       setNewContent("");
+      setNewSnippetCategory("");
       setIsModalOpen(false);
       showToast("Snippet saved!");
       await loadData();
@@ -90,7 +134,18 @@ function App() {
           >
             <span role="img" aria-label="All">📚</span> All Snippets
           </li>
-          {/* Future dynamic categories will render here */}
+          {categories.map((category) => (
+            <li
+              key={category.id}
+              className={`category-item ${selectedCategory === category.id ? "active" : ""}`}
+              onClick={() => setSelectedCategory(category.id)}
+            >
+              <span role="img" aria-label="Folder">📁</span> {category.name}
+            </li>
+          ))}
+          <li className="category-item" style={{ borderStyle: "dashed", marginTop: "1rem" }} onClick={() => setIsCategoryModalOpen(true)}>
+            <span role="img" aria-label="Add">+</span> Add Category
+          </li>
         </ul>
       </aside>
 
@@ -111,9 +166,9 @@ function App() {
               <div 
                 key={snippet.id} 
                 className="snippet-card"
-                onClick={() => handleCopy(snippet.content)}
+                onClick={() => setViewSnippet(snippet)}
               >
-                <div className="copy-indicator">Click to copy</div>
+                <div className="copy-indicator">View Full Snippet</div>
                 <h3>{snippet.title}</h3>
                 <div className="snippet-content-preview">
                   <SyntaxHighlighter
@@ -162,6 +217,20 @@ function App() {
                 />
               </div>
               <div className="form-group">
+                <label htmlFor="category">Category (Optional)</label>
+                <select
+                  id="category"
+                  className="form-input"
+                  value={newSnippetCategory}
+                  onChange={(e) => setNewSnippetCategory(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">No Category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
                 <label htmlFor="content">Prompt Content</label>
                 <textarea
                   id="content"
@@ -181,6 +250,90 @@ function App() {
                 </button>
                 <button type="submit" className="btn-primary">
                   Save Snippet
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Snippet Modal */}
+      {viewSnippet && (
+        <div className="modal-overlay" onClick={() => setViewSnippet(null)}>
+          <div className="modal-content view-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{viewSnippet.title}</h2>
+              <button className="btn-secondary" onClick={() => handleCopy(viewSnippet.content)}>
+                📋 Copy
+              </button>
+            </div>
+            <div className="view-snippet-content">
+              <SyntaxHighlighter
+                language="markdown"
+                style={vscDarkPlus}
+                customStyle={{
+                  background: "rgba(0, 0, 0, 0.3)",
+                  padding: "1rem",
+                  borderRadius: "8px",
+                  fontSize: "0.95rem",
+                  margin: 0
+                }}
+                wrapLongLines={true}
+              >
+                {viewSnippet.content}
+              </SyntaxHighlighter>
+            </div>
+            <div className="modal-actions" style={{ marginTop: "1rem", justifyContent: "space-between" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ borderColor: "var(--text-muted)", color: "var(--text-muted)" }}
+                onClick={() => handleDeleteSnippet(viewSnippet.id)}
+              >
+                🗑️ Delete
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setViewSnippet(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Modal */}
+      {isCategoryModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsCategoryModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add New Category</h2>
+            </div>
+            <form onSubmit={handleAddCategory}>
+              <div className="form-group">
+                <label htmlFor="cat-name">Category Name</label>
+                <input
+                  id="cat-name"
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g., Marketing"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsCategoryModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Save Category
                 </button>
               </div>
             </form>

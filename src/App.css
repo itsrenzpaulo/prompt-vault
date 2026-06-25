@@ -27,6 +27,7 @@
   letter-spacing: -0.02em;
   background: linear-gradient(135deg, var(--text-primary), var(--accent-primary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -174,6 +175,7 @@
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   z-index: 1;
@@ -223,6 +225,34 @@
 
 .modal-header h2 {
   font-size: 1.25rem;
+}
+
+.view-modal {
+  max-width: 800px;
+  width: 95%;
+}
+
+.view-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.view-snippet-content {
+  max-height: 60vh;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.view-snippet-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.view-snippet-content::-webkit-scrollbar-thumb {
+  background: var(--border-focus);
+  border-radius: 4px;
 }
 
 .form-group {

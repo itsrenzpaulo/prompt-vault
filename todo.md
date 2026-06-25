@@ -50,6 +50,6 @@
 - [x] Build a production installer executable (`.exe` or `.msi`) to verify the asset bundles correctly.
 
 ### Phase 6: App Branding
-- [ ] Change app name to Prompt Vault
-- [ ] Generate and set custom app icon
+- [x] Change app name to Prompt Vault
+- [x] Generate and set custom app icon
 
