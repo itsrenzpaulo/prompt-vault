@@ -6,7 +6,10 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "clipboard-manager:default",
     "sql:default",
-    "clipboard-manager:default"
+    "sql:allow-load",
+    "sql:allow-execute",
+    "sql:allow-select"
   ]
 }
