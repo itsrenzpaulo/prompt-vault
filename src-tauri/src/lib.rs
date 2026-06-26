@@ -6,12 +6,20 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![tauri_plugin_sql::Migration {
-        version: 1,
-        description: "create_initial_tables",
-        sql: include_str!("../schema.sql"),
-        kind: tauri_plugin_sql::MigrationKind::Up,
-    }];
+    let migrations = vec![
+        tauri_plugin_sql::Migration {
+            version: 1,
+            description: "create_initial_tables",
+            sql: include_str!("../schema.sql"),
+            kind: tauri_plugin_sql::MigrationKind::Up,
+        },
+        tauri_plugin_sql::Migration {
+            version: 2,
+            description: "add_color_to_categories",
+            sql: "ALTER TABLE categories ADD COLUMN color TEXT DEFAULT '#938f99';",
+            kind: tauri_plugin_sql::MigrationKind::Up,
+        }
+    ];
 
     tauri::Builder::default()
         .setup(|app| {

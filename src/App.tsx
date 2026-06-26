@@ -27,12 +27,16 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [viewSnippet, setViewSnippet] = useState<Snippet | null>(null);
+  const [isEditingSnippet, setIsEditingSnippet] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [newTags, setNewTags] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState("#938f99");
   const [newSnippetCategory, setNewSnippetCategory] = useState<number | "">("");
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -83,8 +87,9 @@ function App() {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
     try {
-      await createCategory(newCategoryName);
+      await createCategory(newCategoryName, newCategoryColor);
       setNewCategoryName("");
+      setNewCategoryColor("#938f99");
       setIsCategoryModalOpen(false);
       showToast("Category created!");
       await loadData();
@@ -139,9 +144,11 @@ function App() {
 
     try {
       const catId = typeof newSnippetCategory === "number" ? newSnippetCategory : undefined;
-      await createSnippet(newTitle, newContent, catId);
+      const tagsArray = newTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+      await createSnippet(newTitle, newContent, catId, tagsArray);
       setNewTitle("");
       setNewContent("");
+      setNewTags("");
       setNewSnippetCategory("");
       setIsModalOpen(false);
       showToast("Snippet saved!");
@@ -152,9 +159,64 @@ function App() {
     }
   };
 
-  const displayedSnippets = selectedCategory
-    ? snippets.filter((s) => s.category_id === selectedCategory)
-    : snippets;
+  const handleEditSnippetClick = () => {
+    if (!viewSnippet) return;
+    setNewTitle(viewSnippet.title);
+    setNewContent(viewSnippet.content);
+    setNewTags(viewSnippet.tags ? viewSnippet.tags.join(", ") : "");
+    setNewSnippetCategory(viewSnippet.category_id ?? "");
+    setIsEditingSnippet(true);
+  };
+
+  const handleUpdateSnippet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewSnippet || !newTitle.trim() || !newContent.trim()) return;
+
+    try {
+      // Import updateSnippet dynamically or assume it was added to the imports at top
+      // Wait, we need to add updateSnippet to imports at top of file! We will do that in the next chunk.
+      const catId = typeof newSnippetCategory === "number" ? newSnippetCategory : undefined;
+      const tagsArray = newTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+      
+      const { updateSnippet } = await import("./db/queries");
+      await updateSnippet(viewSnippet.id, newTitle, newContent, catId, tagsArray);
+      
+      setIsEditingSnippet(false);
+      setNewTitle("");
+      setNewContent("");
+      setNewTags("");
+      setNewSnippetCategory("");
+      showToast("Snippet updated!");
+      
+      // Update local view so modal reflects changes without needing a full reload to show them
+      setViewSnippet({
+        ...viewSnippet,
+        title: newTitle,
+        content: newContent,
+        category_id: catId,
+        tags: tagsArray,
+        updated_at: new Date().toISOString()
+      });
+      
+      await loadData();
+    } catch (error) {
+      console.error("Failed to update snippet:", error);
+      showToast("Failed to update snippet.");
+    }
+  };
+
+  const displayedSnippets = snippets.filter((s) => {
+    const matchesCategory = selectedCategory ? s.category_id === selectedCategory : true;
+    if (!matchesCategory) return false;
+    if (!searchQuery) return true;
+    
+    const lowerQuery = searchQuery.toLowerCase();
+    const matchesTitle = s.title.toLowerCase().includes(lowerQuery);
+    const matchesContent = s.content.toLowerCase().includes(lowerQuery);
+    const matchesTags = s.tags?.some(tag => tag.toLowerCase().includes(lowerQuery));
+    
+    return matchesTitle || matchesContent || matchesTags;
+  });
 
   return (
     <div className="app-layout">
@@ -163,15 +225,17 @@ function App() {
         <div className="sidebar-header">
           <h1>Prompt Vault</h1>
         </div>
+        <div 
+          className={`category-item ${selectedCategory === null ? "active" : ""}`}
+          onClick={() => setSelectedCategory(null)}
+          style={{ marginBottom: '1rem', flexShrink: 0 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span className="material-symbols-outlined">home</span> <span className="cat-name">All Snippets</span>
+          </div>
+        </div>
+        
         <ul className="category-list">
-          <li
-            className={`category-item ${selectedCategory === null ? "active" : ""}`}
-            onClick={() => setSelectedCategory(null)}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span role="img" aria-label="All">📚</span> <span className="cat-name">All Snippets</span>
-            </div>
-          </li>
           {categories.map((category) => (
             <li
               key={category.id}
@@ -196,7 +260,7 @@ function App() {
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span role="img" aria-label="Folder">📁</span> 
+                    <div style={{ width: '4px', height: '20px', borderRadius: '999px', backgroundColor: category.color || '#938f99' }}></div>
                     <span className="cat-name" title={category.name}>{category.name}</span>
                   </div>
                   <div className="category-actions">
@@ -208,31 +272,51 @@ function App() {
                         setEditingCategoryName(category.name); 
                       }} 
                       title="Rename"
-                    >✏️</button>
+                    ><span className="material-symbols-outlined" style={{fontSize: '1rem'}}>edit</span></button>
                     <button 
                       type="button"
                       onClick={(e) => handleDeleteCategory(e, category.id)} 
                       title="Delete"
-                    >🗑️</button>
+                    ><span className="material-symbols-outlined" style={{fontSize: '1rem'}}>delete</span></button>
                   </div>
                 </>
               )}
             </li>
           ))}
-          <li className="category-item" style={{ borderStyle: "dashed", marginTop: "1rem" }} onClick={() => setIsCategoryModalOpen(true)}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span role="img" aria-label="Add">+</span> <span className="cat-name">Add Category</span>
-            </div>
-          </li>
         </ul>
+        
+        <div 
+          className="category-item" 
+          style={{ borderStyle: "dashed", marginTop: "1rem", flexShrink: 0 }} 
+          onClick={() => setIsCategoryModalOpen(true)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span className="material-symbols-outlined">add</span> <span className="cat-name">Add Category</span>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content Area */}
       <main className="main-content">
         <div className="top-bar">
           <h2>{selectedCategory === null ? "All Snippets" : categories.find(c => c.id === selectedCategory)?.name || "Category"}</h2>
-          <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-            + New Snippet
+          <div className="search-bar">
+            <span className="material-symbols-outlined">search</span>
+            <input 
+              type="text" 
+              placeholder="Search title, content, or tags..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button className="btn-primary" onClick={() => { 
+            setNewTitle("");
+            setNewContent("");
+            setNewTags("");
+            setNewSnippetCategory(selectedCategory ?? ""); 
+            setIsModalOpen(true); 
+          }}>
+            <span className="material-symbols-outlined">add</span> New Snippet
           </button>
         </div>
 
@@ -264,6 +348,13 @@ function App() {
                     {snippet.content}
                   </SyntaxHighlighter>
                 </div>
+                {snippet.tags && snippet.tags.length > 0 && (
+                  <div className="tags-container">
+                    {snippet.tags.map(tag => (
+                      <span key={tag} className="tag-pill">{tag}</span>
+                    ))}
+                  </div>
+                )}
                 <div className="snippet-meta">
                   <span>ID: {snippet.id}</span>
                   <span>{new Date(snippet.created_at).toLocaleDateString()}</span>
@@ -276,7 +367,7 @@ function App() {
 
       {/* Add Snippet Modal */}
       {isModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add New Snippet</h2>
@@ -309,6 +400,17 @@ function App() {
                 </select>
               </div>
               <div className="form-group">
+                <label htmlFor="tags">Tags (Comma separated)</label>
+                <input
+                  id="tags"
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g., rust, api, sql"
+                  value={newTags}
+                  onChange={(e) => setNewTags(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
                 <label htmlFor="content">Prompt Content</label>
                 <textarea
                   id="content"
@@ -324,10 +426,10 @@ function App() {
                   className="btn-secondary"
                   onClick={() => setIsModalOpen(false)}
                 >
-                  Cancel
+                  <span className="material-symbols-outlined">close</span> Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  Save Snippet
+                  <span className="material-symbols-outlined">save</span> Save
                 </button>
               </div>
             </form>
@@ -335,56 +437,108 @@ function App() {
         </div>
       )}
 
-      {/* View Snippet Modal */}
+      {/* View/Edit Snippet Modal */}
       {viewSnippet && (
-        <div className="modal-overlay" onClick={() => setViewSnippet(null)}>
+        <div className="modal-overlay">
           <div className="modal-content view-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{viewSnippet.title}</h2>
-              <button className="btn-secondary" onClick={() => handleCopy(viewSnippet.content)}>
-                📋 Copy
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {!isEditingSnippet ? (
+                  <>
+                    <button className="btn-secondary" onClick={handleEditSnippetClick} title="Edit Snippet">
+                      <span className="material-symbols-outlined">edit</span>
+                    </button>
+                    <button className="btn-secondary" onClick={() => handleCopy(viewSnippet.content)} title="Copy Snippet">
+                      <span className="material-symbols-outlined">content_copy</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn-secondary" onClick={() => setIsEditingSnippet(false)} title="Cancel Edit">
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                    <button className="btn-primary" onClick={handleUpdateSnippet} title="Save Snippet">
+                      <span className="material-symbols-outlined">save</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
+            
             <div className="view-snippet-content">
-              <SyntaxHighlighter
-                language="markdown"
-                style={vscDarkPlus}
-                customStyle={{
-                  background: "rgba(0, 0, 0, 0.3)",
-                  padding: "1rem",
-                  borderRadius: "8px",
-                  fontSize: "0.95rem",
-                  margin: 0
-                }}
-                wrapLongLines={true}
-              >
-                {viewSnippet.content}
-              </SyntaxHighlighter>
+              {!isEditingSnippet ? (
+                <SyntaxHighlighter
+                  language="markdown"
+                  style={vscDarkPlus}
+                  customStyle={{
+                    background: "rgba(0, 0, 0, 0.3)",
+                    padding: "1rem",
+                    borderRadius: "8px",
+                    fontSize: "0.95rem",
+                    margin: 0
+                  }}
+                  wrapLongLines={true}
+                >
+                  {viewSnippet.content}
+                </SyntaxHighlighter>
+              ) : (
+                <textarea
+                  className="form-input"
+                  style={{ 
+                    minHeight: '60vh',
+                    width: '100%',
+                    resize: 'vertical',
+                    fontFamily: "'JetBrains Mono', monospace", 
+                    fontSize: "0.95rem", 
+                    background: "rgba(0, 0, 0, 0.3)", 
+                    padding: "1rem",
+                    border: "1px solid var(--border-subtle)",
+                    color: "var(--text-primary)"
+                  }}
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                  autoFocus
+                />
+              )}
             </div>
-            <div className="modal-actions" style={{ marginTop: "1rem", justifyContent: "space-between" }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ borderColor: "var(--text-muted)", color: "var(--text-muted)" }}
-                onClick={() => handleDeleteSnippet(viewSnippet.id)}
-              >
-                🗑️ Delete
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setViewSnippet(null)}
-              >
-                Close
-              </button>
-            </div>
+            
+            {viewSnippet.tags && viewSnippet.tags.length > 0 && (
+              <div className="tags-container" style={{ marginTop: '1rem' }}>
+                {viewSnippet.tags.map(tag => (
+                  <span key={tag} className="tag-pill">{tag}</span>
+                ))}
+              </div>
+            )}
+            
+            {!isEditingSnippet && (
+              <div className="modal-actions" style={{ marginTop: "1rem", justifyContent: "space-between" }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ borderColor: "#ef4444", color: "#ef4444" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  onClick={() => handleDeleteSnippet(viewSnippet.id)}
+                >
+                  <span className="material-symbols-outlined">delete</span> Delete
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setViewSnippet(null)}
+                >
+                  <span className="material-symbols-outlined">close</span> Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Add Category Modal */}
       {isCategoryModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsCategoryModalOpen(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add New Category</h2>
@@ -402,16 +556,37 @@ function App() {
                   autoFocus
                 />
               </div>
+              <div className="form-group">
+                <label htmlFor="cat-color">Category Color</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <input
+                    id="cat-color"
+                    type="color"
+                    value={newCategoryColor}
+                    onChange={(e) => setNewCategoryColor(e.target.value)}
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      padding: 0,
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'transparent',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{newCategoryColor}</span>
+                </div>
+              </div>
               <div className="modal-actions">
                 <button
                   type="button"
                   className="btn-secondary"
                   onClick={() => setIsCategoryModalOpen(false)}
                 >
-                  Cancel
+                  <span className="material-symbols-outlined">close</span> Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  Save Category
+                  <span className="material-symbols-outlined">save</span> Save
                 </button>
               </div>
             </form>
@@ -422,7 +597,7 @@ function App() {
       {/* Toast Notification Overlay */}
       {toastMessage && (
         <div className="toast-container">
-          <span role="img" aria-label="Success">✨</span> {toastMessage}
+          <span className="material-symbols-outlined">check_circle</span> {toastMessage}
         </div>
       )}
     </div>
