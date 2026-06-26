@@ -8,6 +8,8 @@ import {
   createSnippet,
   deleteSnippet,
   createCategory,
+  renameCategory,
+  deleteCategory,
 } from "./db/queries";
 
 // Clipboard plugin for Tauri v2
@@ -29,6 +31,8 @@ function App() {
   const [newContent, setNewContent] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newSnippetCategory, setNewSnippetCategory] = useState<number | "">("");
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
 
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -59,7 +63,12 @@ function App() {
     try {
       // Fallback for Chrome web testing or restricted environments
       if ('__TAURI_INTERNALS__' in window) {
-        await writeText(content);
+        try {
+          await writeText(content);
+        } catch (tauriErr) {
+          console.warn("Tauri clipboard failed, falling back to web clipboard:", tauriErr);
+          await navigator.clipboard.writeText(content);
+        }
       } else {
         await navigator.clipboard.writeText(content);
       }
@@ -82,6 +91,33 @@ function App() {
     } catch (error) {
       console.error("Failed to create category:", error);
       showToast("Failed to create category.");
+    }
+  };
+
+  const handleDeleteCategory = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    try {
+      await deleteCategory(id);
+      if (selectedCategory === id) setSelectedCategory(null);
+      showToast("Category deleted!");
+      await loadData();
+    } catch (error) {
+      console.error("Failed to delete category:", error);
+      showToast("Failed to delete category.");
+    }
+  };
+
+  const handleRenameCategorySubmit = async (e: React.FormEvent, id: number) => {
+    e.preventDefault();
+    if (!editingCategoryName.trim()) return;
+    try {
+      await renameCategory(id, editingCategoryName);
+      setEditingCategoryId(null);
+      showToast("Category renamed!");
+      await loadData();
+    } catch (error) {
+      console.error("Failed to rename category:", error);
+      showToast("Failed to rename category.");
     }
   };
 
@@ -132,19 +168,61 @@ function App() {
             className={`category-item ${selectedCategory === null ? "active" : ""}`}
             onClick={() => setSelectedCategory(null)}
           >
-            <span role="img" aria-label="All">📚</span> All Snippets
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span role="img" aria-label="All">📚</span> <span className="cat-name">All Snippets</span>
+            </div>
           </li>
           {categories.map((category) => (
             <li
               key={category.id}
               className={`category-item ${selectedCategory === category.id ? "active" : ""}`}
-              onClick={() => setSelectedCategory(category.id)}
+              onClick={() => {
+                if (editingCategoryId !== category.id) setSelectedCategory(category.id);
+              }}
             >
-              <span role="img" aria-label="Folder">📁</span> {category.name}
+              {editingCategoryId === category.id ? (
+                <form onSubmit={(e) => handleRenameCategorySubmit(e, category.id)} style={{ display: 'flex', width: '100%' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ padding: '0.2rem 0.5rem', width: '100%', fontSize: '0.9rem' }}
+                    value={editingCategoryName}
+                    onChange={(e) => setEditingCategoryName(e.target.value)}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => setEditingCategoryId(null)}
+                  />
+                </form>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span role="img" aria-label="Folder">📁</span> 
+                    <span className="cat-name" title={category.name}>{category.name}</span>
+                  </div>
+                  <div className="category-actions">
+                    <button 
+                      type="button"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setEditingCategoryId(category.id); 
+                        setEditingCategoryName(category.name); 
+                      }} 
+                      title="Rename"
+                    >✏️</button>
+                    <button 
+                      type="button"
+                      onClick={(e) => handleDeleteCategory(e, category.id)} 
+                      title="Delete"
+                    >🗑️</button>
+                  </div>
+                </>
+              )}
             </li>
           ))}
           <li className="category-item" style={{ borderStyle: "dashed", marginTop: "1rem" }} onClick={() => setIsCategoryModalOpen(true)}>
-            <span role="img" aria-label="Add">+</span> Add Category
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span role="img" aria-label="Add">+</span> <span className="cat-name">Add Category</span>
+            </div>
           </li>
         </ul>
       </aside>
@@ -152,7 +230,7 @@ function App() {
       {/* Main Content Area */}
       <main className="main-content">
         <div className="top-bar">
-          <h2>{selectedCategory === null ? "All Snippets" : "Category"}</h2>
+          <h2>{selectedCategory === null ? "All Snippets" : categories.find(c => c.id === selectedCategory)?.name || "Category"}</h2>
           <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
             + New Snippet
           </button>

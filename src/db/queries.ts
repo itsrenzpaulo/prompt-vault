@@ -89,6 +89,22 @@ export async function createCategory(name: string): Promise<number> {
 }
 
 /**
+ * Renames a category.
+ */
+export async function renameCategory(id: number, newName: string): Promise<void> {
+  const db = await getDb();
+  await db.execute('UPDATE categories SET name = $1 WHERE id = $2', [newName, id]);
+}
+
+/**
+ * Deletes a category.
+ */
+export async function deleteCategory(id: number): Promise<void> {
+  const db = await getDb();
+  await db.execute('DELETE FROM categories WHERE id = $1', [id]);
+}
+
+/**
  * Adds a tag to a specific snippet.
  */
 export async function addTagToSnippet(snippetId: number, tagId: number): Promise<void> {
