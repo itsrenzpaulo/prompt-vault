@@ -11,6 +11,9 @@ jobs:
   build-tauri:
     permissions:
       contents: write # This fixes the 'Resource not accessible by integration' error!
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      NODE_OPTIONS: "--no-warnings"
     strategy:
       fail-fast: false
       matrix:
