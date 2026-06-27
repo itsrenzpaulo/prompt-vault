@@ -2,7 +2,7 @@
   "name": "prompt-vault",
   "version": "0.1.0",
   "description": "A beautiful, lightning-fast desktop application for managing AI prompts and code snippets.",
-  "author": "Prompt Vault",
+  "author": "Vault Prompt LLC",
   "private": false,
   "type": "module",
   "scripts": {
