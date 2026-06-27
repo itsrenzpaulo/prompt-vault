@@ -18,6 +18,12 @@ pub fn run() {
             description: "add_color_to_categories",
             sql: "ALTER TABLE categories ADD COLUMN color TEXT DEFAULT '#938f99';",
             kind: tauri_plugin_sql::MigrationKind::Up,
+        },
+        tauri_plugin_sql::Migration {
+            version: 3,
+            description: "create_settings_table",
+            sql: "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);",
+            kind: tauri_plugin_sql::MigrationKind::Up,
         }
     ];
 

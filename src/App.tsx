@@ -10,7 +10,11 @@ import {
   createCategory,
   renameCategory,
   deleteCategory,
+  getSetting,
+  setSetting,
 } from "./db/queries";
+
+import { LockScreen, hashPassword } from "./LockScreen";
 
 // Clipboard plugin for Tauri v2
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -20,6 +24,11 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 function App() {
+  // Lock state
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isLocked, setIsLocked] = useState(true);
+  const [isSetupMode, setIsSetupMode] = useState(false);
+
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -52,9 +61,50 @@ function App() {
     }
   };
 
+  const checkAuth = async () => {
+    try {
+      const storedPassword = await getSetting("master_password");
+      if (!storedPassword) {
+        setIsSetupMode(true);
+      } else {
+        setIsSetupMode(false);
+      }
+    } catch (e) {
+      console.error("Failed to check auth:", e);
+      setIsSetupMode(true);
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  };
+
   useEffect(() => {
-    loadData();
+    checkAuth();
   }, []);
+
+  const handleUnlock = async (password: string) => {
+    const storedHash = await getSetting("master_password");
+    const inputHash = await hashPassword(password);
+    if (storedHash === inputHash) {
+      await loadData(); // Load data in the background
+      // Return true immediately so LockScreen can show success state
+      setTimeout(() => {
+        setIsLocked(false);
+      }, 1000);
+      return true;
+    }
+    return false;
+  };
+
+  const handleSetup = async (password: string) => {
+    const hash = await hashPassword(password);
+    await setSetting("master_password", hash);
+    await loadData();
+    // Return to let LockScreen show success state
+    setTimeout(() => {
+      setIsSetupMode(false);
+      setIsLocked(false);
+    }, 1000);
+  };
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -205,18 +255,21 @@ function App() {
     }
   };
 
-  const displayedSnippets = snippets.filter((s) => {
+  const displayedSnippets = snippets.filter(s => {
     const matchesCategory = selectedCategory ? s.category_id === selectedCategory : true;
-    if (!matchesCategory) return false;
-    if (!searchQuery) return true;
-    
-    const lowerQuery = searchQuery.toLowerCase();
-    const matchesTitle = s.title.toLowerCase().includes(lowerQuery);
-    const matchesContent = s.content.toLowerCase().includes(lowerQuery);
-    const matchesTags = s.tags?.some(tag => tag.toLowerCase().includes(lowerQuery));
-    
-    return matchesTitle || matchesContent || matchesTags;
+    const matchesSearch = s.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          s.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (s.tags && s.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())));
+    return matchesCategory && matchesSearch;
   });
+
+  if (isLoadingAuth) {
+    return <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f13', color: 'white', fontFamily: 'system-ui, sans-serif' }}>Loading...</div>;
+  }
+
+  if (isLocked) {
+    return <LockScreen isSetupMode={isSetupMode} onUnlock={handleUnlock} onSetup={handleSetup} />;
+  }
 
   return (
     <div className="app-layout">

@@ -12,6 +12,11 @@ export async function getDb(): Promise<Database> {
     } catch (e) {
       // Column already exists, ignore
     }
+    try {
+      await dbInstance.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);");
+    } catch (e) {
+      console.error("Failed to ensure settings table exists:", e);
+    }
   }
   return dbInstance;
 }
@@ -199,4 +204,21 @@ export async function updateSnippet(
       }
     }
   }
+}
+
+/**
+ * Gets a setting by key.
+ */
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const result = await db.select<{value: string}[]>('SELECT value FROM settings WHERE key = $1', [key]);
+  return result.length > 0 ? result[0].value : null;
+}
+
+/**
+ * Sets a setting by key.
+ */
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.execute('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [key, value]);
 }
