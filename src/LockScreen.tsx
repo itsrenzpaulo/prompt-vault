@@ -68,7 +68,7 @@ const PinInput = ({ value, onChange, autoFocus }: { value: string, onChange: (va
       {inputs.map((_, i) => (
         <input
           key={i}
-          ref={el => inputRefs.current[i] = el}
+          ref={el => { inputRefs.current[i] = el; }}
           type="password"
           inputMode="numeric"
           pattern="\d*"
